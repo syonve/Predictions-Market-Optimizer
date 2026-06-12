@@ -45,6 +45,7 @@ MARKET = Market(
 SHARP = Venue("pinnacle", "Pinnacle", VenueKind.SHARP)
 SOFT_A = Venue("bookA", "BookA", VenueKind.SOFT)
 SOFT_B = Venue("bookB", "BookB", VenueKind.SOFT)
+MODEL = Venue("polling_model", "Polling Model", VenueKind.MODEL)
 
 
 def make_snap(venue: Venue, home_odds: float, away_odds: float) -> MarketSnapshot:
@@ -68,6 +69,7 @@ def make_consensus(home_prob: float) -> ConsensusResult:
         n_sharp=1,
         n_soft=0,
         n_pm=0,
+        n_model=0,
         venue_probs={"pinnacle": (home_prob, away_prob)},
     )
 
@@ -152,6 +154,20 @@ class TestScanEV:
         result = make_consensus(0.50)
         snaps = [make_snap(SHARP, 1.85, 1.85)]
         assert scan_ev(result, snaps, min_edge=0.10) == []
+
+    def test_model_snapshots_are_not_bettable(self):
+        # The model "venue" disagrees hard with consensus (home 40% vs fair
+        # 60%) — its away price of 1/0.60 would look like a huge edge, but a
+        # model is not a place you can bet. No signal may cite it.
+        result = make_consensus(0.60)
+        model_snap = make_snap(MODEL, home_odds=1 / 0.40, away_odds=1 / 0.60)
+        assert scan_ev(result, [model_snap], min_edge=0.0) == []
+
+        # A real venue alongside it still produces its own signals.
+        sharp_snap = make_snap(SHARP, home_odds=2.0, away_odds=1.8)
+        signals = scan_ev(result, [sharp_snap, model_snap], min_edge=0.0)
+        assert signals
+        assert all(s.venue.kind != VenueKind.MODEL for s in signals)
 
 
 # =========================================================================== #
@@ -272,3 +288,56 @@ class TestScanArb:
         assert result is not None
         assert result.arb_sum < 1.0
         assert math.isclose(result.arb_sum, 1 / 2.2 + 1 / 2.1, abs_tol=1e-9)
+
+    def test_model_snapshot_cannot_be_an_arb_leg(self):
+        # Book offers home at 2.20; the model thinks away is 60% (odds 1.667
+        # on home side, 2.50 on away). Pairing book home @ 2.20 with the
+        # model's away @ 2.50 would show S = 1/2.2 + 1/2.5 = 0.854 — a fake
+        # "guaranteed profit" with one untradeable leg.
+        book = make_snap(SOFT_A, home_odds=2.20, away_odds=1.70)
+        model_snap = make_snap(MODEL, home_odds=1 / 0.60, away_odds=2.50)
+        assert scan_arb([book, model_snap]) is None
+
+    def test_model_only_snapshots_return_none(self):
+        model_snap = make_snap(MODEL, home_odds=2.50, away_odds=2.50)
+        assert scan_arb([model_snap]) is None
+
+    def test_wide_book_mid_prices_do_not_fake_an_arb(self):
+        # Order-book venue with a wide spread: mids imply home 45% + away 50%
+        # = 0.95 (an "arb"), but the executable odds (Price.bid, derived from
+        # the asks) imply 52% + 55% = 1.07 — no real arb exists.
+        snap = MarketSnapshot(
+            market=MARKET, venue=SOFT_A, timestamp=TS,
+            prices={
+                "home": Price(decimal_odds=1 / 0.45, bid=1 / 0.52, ask=1 / 0.38),
+                "away": Price(decimal_odds=1 / 0.50, bid=1 / 0.55, ask=1 / 0.45),
+            },
+        )
+        assert scan_arb([snap]) is None
+
+    def test_executable_arb_is_detected_via_bid_odds(self):
+        # Executable odds imply 0.45 + 0.50 = 0.95 < 1 → real arb, roi = 1/19
+        snap = MarketSnapshot(
+            market=MARKET, venue=SOFT_A, timestamp=TS,
+            prices={
+                "home": Price(decimal_odds=1 / 0.50, bid=1 / 0.45, ask=1 / 0.55),
+                "away": Price(decimal_odds=1 / 0.55, bid=1 / 0.50, ask=1 / 0.60),
+            },
+        )
+        result = scan_arb([snap])
+        assert result is not None
+        assert math.isclose(result.arb_sum, 0.95, abs_tol=1e-12)
+        assert math.isclose(result.roi, 0.05 / 0.95, abs_tol=1e-12)
+
+    def test_floating_point_dust_does_not_fire(self):
+        # arb_sum within 1e-9 of 1.0 must not be reported as an arb
+        snap_a = make_snap(SOFT_A, home_odds=2.0, away_odds=1.999999999)
+        snap_b = make_snap(SOFT_B, home_odds=2.000000001, away_odds=2.0)
+        assert scan_arb([snap_a, snap_b]) is None
+
+    def test_min_roi_threshold(self):
+        # Real arb with roi = (1-0.9307)/0.9307 ≈ 7.4% — below a 10% floor
+        snap_a = make_snap(SOFT_A, home_odds=2.20, away_odds=1.70)
+        snap_b = make_snap(SOFT_B, home_odds=1.65, away_odds=2.10)
+        assert scan_arb([snap_a, snap_b], min_roi=0.10) is None
+        assert scan_arb([snap_a, snap_b], min_roi=0.05) is not None

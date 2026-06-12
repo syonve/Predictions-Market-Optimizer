@@ -29,7 +29,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from fve.pricing.consensus import ConsensusResult
-from fve.types import Market, MarketSnapshot, Venue
+from fve.types import Market, MarketSnapshot, Venue, VenueKind
 
 
 # --------------------------------------------------------------------------- #
@@ -99,7 +99,8 @@ def scan_ev(
         selections as the snapshots.
     snapshots:
         One snapshot per venue (or more — duplicates are each evaluated).
-        All must be for the same market.
+        All must be for the same market. MODEL-venue snapshots are skipped:
+        a model's price is an input to fair value, not a bettable quote.
     min_edge:
         Only return signals with edge >= this threshold. Default 0.0 (any
         positive EV). Set e.g. 0.03 to require at least 3% edge before
@@ -117,6 +118,8 @@ def scan_ev(
     signals: list[EVSignal] = []
 
     for snap in snapshots:
+        if snap.venue.kind == VenueKind.MODEL:
+            continue
         for sel_key, price in snap.prices.items():
             fp = result.prob(sel_key)
             e = edge(fp, price.decimal_odds)

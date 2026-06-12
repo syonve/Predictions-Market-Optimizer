@@ -52,8 +52,9 @@ This is converted to a [0,1] confidence score by:
 
     confidence = min(1, sqrt(n_eff / CONFIDENCE_REFERENCE_N))
 
-where CONFIDENCE_REFERENCE_N = 5000 (default). Interpretation: an aggregate
-equivalent to ~5000 unweighted polls earns confidence = 1.0.
+where CONFIDENCE_REFERENCE_N = 25 (default). Interpretation: an aggregate
+equivalent to 25 unweighted polls earns confidence = 1.0 — roughly the
+coverage of a heavily-polled statewide race.
 
 Flagged decisions
 -----------------
@@ -89,8 +90,15 @@ from enum import Enum
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
-CONFIDENCE_REFERENCE_N: float = 5000.0
-"""Effective-N at which confidence reaches 1.0. Adjust to taste."""
+CONFIDENCE_REFERENCE_N: float = 25.0
+"""Effective number of POLLS at which confidence reaches 1.0.
+
+Note the unit: ``aggregate_polls`` returns a Kish effective-N over *polls*
+(an aggregate of 25 equally-weighted polls has effective_n = 25), not over
+respondents. 25 effective polls ≈ a heavily-covered statewide race; sparse
+races (2–5 polls) score 0.28–0.45. This matters because consensus scales the
+polling model's weight by this confidence score.
+"""
 
 
 # --------------------------------------------------------------------------- #

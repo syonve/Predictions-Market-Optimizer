@@ -20,17 +20,43 @@ Base weights (configurable via the `weights` argument):
                              power ratings, etc.); layered in where sharp
                              consensus is weak or absent
 
-Liquidity scaling (EXCHANGE and PREDICTION_MARKET only):
+Liquidity scaling (EXCHANGE and PREDICTION_MARKET):
 
-    If any selection in the snapshot has a non-None `Price.size`, we compute
-    the average size across all selections and multiply the base weight by
-    sqrt(avg_size). sqrt dampens outliers while still rewarding deep books.
-    Snapshots without size data are left at their base weight.
+    If any selection in the snapshot has a non-None `Price.size`, the base
+    weight is multiplied by a NORMALIZED, BOUNDED depth scale:
 
-    Design note: absolute size values are not comparable across venues
-    (Betfair uses GBP, Kalshi uses contracts, Polymarket uses USDC). Weights
-    are normalized before the weighted average, so only *relative* sizes
-    within the same consensus call matter.
+        scale = clamp(sqrt(avg_size / reference_size), min_scale, max_scale)
+
+    Defaults (LiquidityConfig): reference_size=1000, min_scale=0.1,
+    max_scale=2.0. A book at the reference depth keeps its base weight; a
+    book 4x deeper hits the 2.0 cap — which deliberately promotes a deep
+    prediction market (0.5 * 2.0 = 1.0) to sharp-anchor weight, per the
+    design principle that deep PM order books count as sharp. A near-empty
+    book fades toward the 0.1 floor. Snapshots without size data keep their
+    bare base weight.
+
+    History: the original scheme used raw sqrt(avg_size) with no bound. The
+    first live Kalshi run showed why that fails: a ~10k-contract book scaled
+    its weight to ~50, drowning every other voice 1000:1 in units that mean
+    nothing across venues (contracts vs GBP vs USDC). reference_size is
+    venue-unit-specific by construction — set it per venue class in config
+    when a second order-book venue is added.
+
+Confidence scaling (MODEL):
+
+    For MODEL snapshots, `Price.size` carries the model's confidence score
+    in [0, 1] (set by ``ModelEstimate.as_snapshot``), and the base weight is
+    multiplied by it directly — linearly, NOT sqrt: confidence is already a
+    calibrated quality score, and sqrt would compress it upward and
+    over-trust thin models. A model backed by rich data keeps its full base
+    weight; a model resting on two stale polls is discounted toward zero.
+    MODEL snapshots without size data keep their bare base weight
+    (hand-built snapshots remain supported).
+
+    This implements "models are complements, not equal votes": with default
+    weights, a fully-confident polling model contributes 0.3 and the
+    fundamentals model is capped at 0.15 (its max confidence is 0.5), so
+    even both models together (0.45) cannot outvote a Kalshi anchor (0.5).
 
 No-sharp policy
 ---------------
@@ -76,6 +102,33 @@ _DEFAULT_WEIGHTS: dict[VenueKind, float] = {
     # (0.3 vs 1.0 after normalization with typical snapshot counts). Increase
     # if the model has strong calibration history on this market class.
 }
+
+
+@dataclass(frozen=True)
+class LiquidityConfig:
+    """Bounds for order-book depth scaling (EXCHANGE / PREDICTION_MARKET).
+
+    reference_size:
+        Top-of-book size (in the venue's own units) at which a book keeps
+        exactly its base weight. Default 1000 — calibrated to Kalshi
+        contracts; revisit per venue class when other order books are added.
+    min_scale / max_scale:
+        Clamp on the depth multiplier. The 2.0 default cap means the deepest
+        book can at most double its base weight (0.5 → 1.0 for a prediction
+        market — i.e., deep PM books earn sharp-anchor weight, never more).
+    """
+
+    reference_size: float = 1000.0
+    min_scale: float = 0.1
+    max_scale: float = 2.0
+
+    def __post_init__(self) -> None:
+        if self.reference_size <= 0:
+            raise ValueError(f"reference_size must be > 0, got {self.reference_size}")
+        if not 0.0 < self.min_scale <= self.max_scale:
+            raise ValueError(
+                f"need 0 < min_scale <= max_scale, got {self.min_scale}, {self.max_scale}"
+            )
 
 
 # --------------------------------------------------------------------------- #
@@ -127,22 +180,33 @@ class NoSharpAnchorError(ValueError):
 def _snapshot_weight(
     snapshot: MarketSnapshot,
     base_weights: Mapping[VenueKind, float],
+    liquidity: LiquidityConfig = LiquidityConfig(),
 ) -> float:
     """Effective weight for one snapshot.
 
-    For EXCHANGE and PREDICTION_MARKET snapshots that carry `Price.size` data,
-    the base weight is scaled by sqrt(average size across all selections).
-    All other snapshots use the bare base weight.
+    EXCHANGE / PREDICTION_MARKET snapshots with `Price.size` data scale by a
+    normalized, clamped depth multiplier (see LiquidityConfig) — deeper
+    books, louder voice, bounded. MODEL snapshots with `Price.size` data
+    scale linearly by it: for models, size carries the confidence score in
+    [0, 1] (clamped here defensively). Snapshots without size data use the
+    bare base weight.
     """
     base = base_weights.get(snapshot.venue.kind, 0.0)
     if base == 0.0:
         return 0.0
 
+    sizes = [p.size for p in snapshot.prices.values() if p.size is not None]
+
     if snapshot.venue.kind in (VenueKind.EXCHANGE, VenueKind.PREDICTION_MARKET):
-        sizes = [p.size for p in snapshot.prices.values() if p.size is not None]
         if sizes:
             avg_size = sum(sizes) / len(sizes)
-            return base * math.sqrt(avg_size)
+            scale = math.sqrt(max(0.0, avg_size) / liquidity.reference_size)
+            scale = max(liquidity.min_scale, min(liquidity.max_scale, scale))
+            return base * scale
+    elif snapshot.venue.kind is VenueKind.MODEL:
+        if sizes:
+            confidence = max(0.0, min(1.0, sum(sizes) / len(sizes)))
+            return base * confidence
 
     return base
 
@@ -154,6 +218,8 @@ def consensus(
     snapshots: Sequence[MarketSnapshot],
     method: DevigMethod = "shin",
     weights: Mapping[VenueKind, float] | None = None,
+    require_sharp: bool = True,
+    liquidity: LiquidityConfig = LiquidityConfig(),
 ) -> ConsensusResult:
     """Compute a weighted fair-probability distribution for a market.
 
@@ -169,6 +235,12 @@ def consensus(
     weights:
         Mapping from `VenueKind` to base weight. Defaults to `_DEFAULT_WEIGHTS`.
         Supply a custom mapping to override any or all venue-kind weights.
+    require_sharp:
+        If True (default), raises NoSharpAnchorError when no SHARP or EXCHANGE
+        snapshot is present. Set to False for political/prediction markets where
+        Kalshi or Polymarket IS the primary price source and no sharp books exist.
+    liquidity:
+        Bounds for order-book depth scaling. See LiquidityConfig.
 
     Returns
     -------
@@ -192,7 +264,7 @@ def consensus(
     n_pm = sum(1 for s in snapshots if s.venue.kind == VenueKind.PREDICTION_MARKET)
     n_model = sum(1 for s in snapshots if s.venue.kind == VenueKind.MODEL)
 
-    if n_sharp == 0:
+    if require_sharp and n_sharp == 0:
         raise NoSharpAnchorError(
             f"no SHARP or EXCHANGE snapshots available "
             f"(soft={n_soft}, pm={n_pm}). "
@@ -223,7 +295,7 @@ def consensus(
             fair_p = devig(odds, method=method)
         venue_probs[snap.venue.key] = fair_p
 
-        w = _snapshot_weight(snap, eff_weights)
+        w = _snapshot_weight(snap, eff_weights, liquidity)
         for i, p in enumerate(fair_p):
             weighted_sum[i] += w * p
         total_weight += w

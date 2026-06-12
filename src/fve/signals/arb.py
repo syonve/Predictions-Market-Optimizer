@@ -34,7 +34,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from fve.types import Market, MarketSnapshot, Venue
+from fve.types import Market, MarketSnapshot, Venue, VenueKind
 
 
 # --------------------------------------------------------------------------- #
@@ -103,45 +103,63 @@ def stake_fractions(best_odds: Sequence[float]) -> tuple[float, ...]:
 # --------------------------------------------------------------------------- #
 # Scanner
 # --------------------------------------------------------------------------- #
-def scan_arb(snapshots: Sequence[MarketSnapshot]) -> ArbSignal | None:
+def scan_arb(
+    snapshots: Sequence[MarketSnapshot],
+    min_roi: float = 0.0,
+) -> ArbSignal | None:
     """Detect a cross-venue arbitrage across the supplied snapshots.
 
-    For each outcome, finds the venue offering the highest decimal odds, then
-    checks whether those best odds collectively produce arb_sum < 1.
+    For each outcome, finds the venue offering the highest EXECUTABLE decimal
+    odds, then checks whether those best odds collectively produce arb_sum < 1.
+
+    Executable odds: an arb must survive crossing the spread. For order-book
+    venues, ``Price.bid`` holds the best odds a buyer can actually get (it is
+    derived from the book's ask price); the mid-based ``Price.decimal_odds``
+    overstates both legs and produces phantom arbs on wide books. When
+    ``Price.bid`` is None (single-quote venues like sportsbooks), the quoted
+    ``decimal_odds`` IS the executable price and is used directly.
 
     Parameters
     ----------
     snapshots:
         All available snapshots for a single market. May span any number of
-        venues and venue kinds — arb detection is venue-agnostic.
+        venues and venue kinds. MODEL-venue snapshots are skipped: an arb leg
+        must be executable, and a model's price is not a bettable quote.
+    min_roi:
+        Minimum guaranteed ROI required to report the arb. Defaults to 0.0,
+        i.e. any strictly profitable arb (a tolerance guard prevents
+        floating-point dust at arb_sum ≈ 1.0 from firing). Set higher to
+        clear fees/slippage — e.g. 0.01 for Kalshi's ~1% round-trip cost.
 
     Returns
     -------
     ArbSignal
-        If arb_sum < 1: the confirmed arbitrage with legs, arb_sum, and ROI.
+        If a profitable arb exists: legs, arb_sum, and ROI.
     None
-        If no arbitrage exists at current prices.
+        If no arbitrage exists at current executable prices.
     """
-    if not snapshots:
+    bettable = [s for s in snapshots if s.venue.kind != VenueKind.MODEL]
+    if not bettable:
         return None
 
-    market = snapshots[0].market
+    market = bettable[0].market
     sel_by_key = {s.key: s for s in market.selections}
 
-    # --- find best (highest) decimal odds per outcome across all venues ---
+    # --- find best (highest) executable odds per outcome across all venues ---
     best: dict[str, tuple[float, Venue]] = {}  # sel_key → (odds, venue)
-    for snap in snapshots:
+    for snap in bettable:
         for sel_key, price in snap.prices.items():
+            odds = price.bid if price.bid is not None else price.decimal_odds
             prev_odds, _ = best.get(sel_key, (0.0, snap.venue))
-            if price.decimal_odds > prev_odds:
-                best[sel_key] = (price.decimal_odds, snap.venue)
+            if odds > prev_odds:
+                best[sel_key] = (odds, snap.venue)
 
     # --- arb check ---
     ordered_keys = [s.key for s in market.selections]
     best_odds_list = [best[k][0] for k in ordered_keys]
     arb_sum = sum(1.0 / d for d in best_odds_list)
 
-    if arb_sum >= 1.0:
+    if arb_sum >= 1.0 - 1e-9 or arb_roi(arb_sum) < min_roi:
         return None
 
     # --- build ArbSignal ---

@@ -21,13 +21,12 @@ Flagged decisions
    order-book consensus. Adjust the weight in config if you trust the model
    more (e.g., on very illiquid obscure elections).
 
-2. **ModelEstimate carries a confidence score [0, 1].** This is the
-   normalized effective-N of the underlying data (polls, signals, etc.).
-   It is *not* currently plumbed into the consensus weights — the consensus
-   applies a flat VenueKind.MODEL weight regardless of confidence. A future
-   improvement would scale the model snapshot's Price.size field with
-   confidence so the liquidity-weighted consensus step automatically
-   discounts low-confidence models.
+2. **ModelEstimate carries a confidence score [0, 1] — and it IS plumbed
+   into consensus weights.** ``as_snapshot()`` stores the confidence in each
+   ``Price.size`` field; ``pricing.consensus._snapshot_weight`` multiplies
+   the MODEL base weight by it. A fully-confident model gets its full base
+   weight (0.3); a thin model is discounted proportionally. Convention: for
+   MODEL venues, ``Price.size`` means confidence in [0, 1], not liquidity.
 
 3. **ModelProvider is synchronous.** Matching OddsProvider v0. Async can
    be added later as an AsyncModelProvider Protocol if polling APIs or
@@ -95,6 +94,8 @@ class ModelEstimate:
         """Convert this estimate to a MarketSnapshot for use in consensus.
 
         Each selection's probability is converted to decimal odds (1/p).
+        The model's confidence is stored in each ``Price.size`` so the
+        consensus weight scales with data quality (see flagged decision 2).
         The snapshot is *not* marked as closing.
         """
         prices: dict[str, Price] = {}
@@ -107,7 +108,7 @@ class ModelEstimate:
                 )
             # Clamp to avoid decimal_odds <= 1.0 at floating-point boundaries
             p_safe = max(1e-6, min(1.0 - 1e-6, p))
-            prices[sel.key] = Price(decimal_odds=1.0 / p_safe)
+            prices[sel.key] = Price(decimal_odds=1.0 / p_safe, size=self.confidence)
 
         return MarketSnapshot(
             market=self.market,

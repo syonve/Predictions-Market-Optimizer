@@ -155,22 +155,22 @@ def test_symmetric_book_gives_even_split(method):
 # --------------------------------------------------------------------------- #
 def test_liquidity_weights_exchange_snapshots():
     """
-    Two EXCHANGE snapshots with different size:
-      snap1: size=1  → weight = 1.0 * sqrt(avg(1,1)) = 1.0
-      snap2: size=100 → weight = 1.0 * sqrt(avg(100,100)) = 10.0
+    Two EXCHANGE snapshots with different depth (reference_size=1000):
+      snap1: size=250  → scale = sqrt(250/1000) = 0.5  → weight 0.5
+      snap2: size=4000 → scale = sqrt(4000/1000) = 2.0 → weight 2.0
 
-    Expected consensus[i] = (1.0*p1[i] + 10.0*p2[i]) / 11.0
+    Expected consensus[i] = (0.5*p1[i] + 2.0*p2[i]) / 2.5
     """
-    snap1 = make_snap(EXCHANGE_VENUE, 1.6, 2.4, home_size=1.0, away_size=1.0)
+    snap1 = make_snap(EXCHANGE_VENUE, 1.6, 2.4, home_size=250.0, away_size=250.0)
     snap2 = make_snap(
         Venue("betfair2", "Betfair2", VenueKind.EXCHANGE),
         1.7, 2.2,
-        home_size=100.0, away_size=100.0,
+        home_size=4000.0, away_size=4000.0,
     )
 
     p1 = proportional(implied_probs([1.6, 2.4]))
     p2 = proportional(implied_probs([1.7, 2.2]))
-    w1, w2 = 1.0 * math.sqrt(1.0), 1.0 * math.sqrt(100.0)
+    w1, w2 = 0.5, 2.0
     total = w1 + w2
     expected = (
         (w1 * p1[0] + w2 * p2[0]) / total,
@@ -182,17 +182,84 @@ def test_liquidity_weights_exchange_snapshots():
 
 
 def test_snapshot_without_size_uses_base_weight():
-    """No size data → weight = base weight (sqrt(size) scaling is skipped)."""
+    """No size data → weight = base weight (depth scaling is skipped)."""
     snap_no_size = make_snap(EXCHANGE_VENUE, 1.91, 1.91)
     w = _snapshot_weight(snap_no_size, _DEFAULT_WEIGHTS)
     assert w == pytest.approx(1.0, abs=1e-9)  # Exchange base weight
 
 
-def test_snapshot_with_size_scales_weight():
-    snap = make_snap(PM_VENUE, 1.91, 1.91, home_size=4.0, away_size=4.0)
+def test_snapshot_at_reference_depth_keeps_base_weight():
+    snap = make_snap(PM_VENUE, 1.91, 1.91, home_size=1000.0, away_size=1000.0)
     w = _snapshot_weight(snap, _DEFAULT_WEIGHTS)
-    # PM base=0.5, sqrt(avg(4,4))=2.0 → 0.5 * 2.0 = 1.0
-    assert w == pytest.approx(0.5 * math.sqrt(4.0), abs=1e-9)
+    # scale = sqrt(1000/1000) = 1.0 → PM base weight 0.5 unchanged
+    assert w == pytest.approx(0.5, abs=1e-9)
+
+
+def test_deep_book_capped_at_sharp_anchor_weight():
+    # The live-run case: ~10k contracts must NOT scale to weight ~50.
+    # sqrt(9947/1000) = 3.15 → capped at 2.0 → 0.5 * 2.0 = 1.0 (sharp weight)
+    snap = make_snap(PM_VENUE, 1.91, 1.91, home_size=9947.0, away_size=9947.0)
+    w = _snapshot_weight(snap, _DEFAULT_WEIGHTS)
+    assert w == pytest.approx(1.0, abs=1e-9)
+
+
+def test_near_empty_book_floored():
+    # size=1 → sqrt(0.001) = 0.032 → floored at 0.1 → 0.5 * 0.1 = 0.05
+    snap = make_snap(PM_VENUE, 1.91, 1.91, home_size=1.0, away_size=1.0)
+    w = _snapshot_weight(snap, _DEFAULT_WEIGHTS)
+    assert w == pytest.approx(0.05, abs=1e-9)
+
+
+# --------------------------------------------------------------------------- #
+# MODEL confidence scaling: Price.size carries confidence in [0, 1]
+# --------------------------------------------------------------------------- #
+MODEL_VENUE = Venue("polling_model", "Polling Model", VenueKind.MODEL)
+
+
+def test_model_weight_scales_linearly_with_confidence():
+    # MODEL base=0.3, confidence 0.5 → 0.15 (linear, NOT sqrt: sqrt(0.5)
+    # would give 0.212 and over-trust a half-confident model)
+    snap = make_snap(MODEL_VENUE, 2.0, 2.0, home_size=0.5, away_size=0.5)
+    w = _snapshot_weight(snap, _DEFAULT_WEIGHTS)
+    assert w == pytest.approx(0.3 * 0.5, abs=1e-9)
+
+
+def test_model_without_confidence_uses_base_weight():
+    # Hand-built model snapshots (no size) keep the bare base weight
+    snap = make_snap(MODEL_VENUE, 2.0, 2.0)
+    w = _snapshot_weight(snap, _DEFAULT_WEIGHTS)
+    assert w == pytest.approx(0.3, abs=1e-9)
+
+
+def test_model_confidence_clamped_to_unit_interval():
+    # Defensive: a size > 1 on a MODEL snapshot must not inflate its weight
+    snap = make_snap(MODEL_VENUE, 2.0, 2.0, home_size=50.0, away_size=50.0)
+    w = _snapshot_weight(snap, _DEFAULT_WEIGHTS)
+    assert w == pytest.approx(0.3, abs=1e-9)
+
+
+def test_zero_confidence_model_is_silenced():
+    """
+    PM at 50/50 plus a zero-confidence model at 80/20: the model's weight is
+    0.3 * 0 = 0, so consensus must equal the PM's distribution exactly.
+    """
+    pm = make_snap(PM_VENUE, 2.0, 2.0)
+    model = make_snap(MODEL_VENUE, 1 / 0.8, 1 / 0.2, home_size=0.0, away_size=0.0)
+    result = consensus([pm, model], method="proportional", require_sharp=False)
+    assert result.fair_probs == pytest.approx((0.5, 0.5), abs=1e-9)
+
+
+def test_confidence_weighted_blend_known_answer():
+    """
+    PM (no size): weight 0.5, fair (0.5, 0.5)
+    Model conf 0.5: weight 0.3*0.5 = 0.15, fair (0.6, 0.4) — booksum 1, used as-is
+    Expected home = (0.5*0.5 + 0.15*0.6) / 0.65 = 0.523077
+    """
+    pm = make_snap(PM_VENUE, 2.0, 2.0)
+    model = make_snap(MODEL_VENUE, 1 / 0.6, 1 / 0.4, home_size=0.5, away_size=0.5)
+    result = consensus([pm, model], method="proportional", require_sharp=False)
+    expected_home = (0.5 * 0.5 + 0.15 * 0.6) / 0.65
+    assert result.fair_probs[0] == pytest.approx(expected_home, abs=1e-9)
 
 
 # --------------------------------------------------------------------------- #

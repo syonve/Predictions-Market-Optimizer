@@ -220,7 +220,10 @@ class KalshiProvider:
             Pass an empty string to list all open markets (may be slow).
         """
         markets: list[Market] = []
-        params: dict[str, str] = {"status": "active", "limit": "1000", "mve_filter": "exclude"}
+        # NOTE: the query filter value is "open", but returned market objects
+        # report status "active" — verified against the live API 2026-06-09.
+        # Passing status=active silently returns zero markets.
+        params: dict[str, str] = {"status": "open", "limit": "1000", "mve_filter": "exclude"}
         if sport:
             params["series_ticker"] = sport
 
