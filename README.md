@@ -278,12 +278,25 @@ jumps): jumps are directionally real — outcomes landed +21.6 pts (±2.6) from
 the PRE-jump price in the move's direction — but systematically OVERSHOOT:
 outcomes landed −7.4 pts (±2.6) back from the POST-jump price, and a week
 later prices had given back −10.1 pts (±2.5) of the move on average (n=123).
-Same pattern on early-close markets (−5.4 / −8.4 pts). Interpretation: big
-moves are right in direction, exaggerated in size — partial-fade is a
-candidate edge. NOT yet tradeable as-is: sibling-market jumps are correlated
-(true sample is smaller than jump count; needs an event-level bootstrap), and
-jump days are exactly when spreads widen — must be re-tested at executable
-prices net of fees before becoming a model input.
+Same pattern on early-close markets (−5.4 / −8.4 pts).
+
+Fade tradeability test (2026-06-12, scripts/backtest_jump_fade.py): the
+overreaction is REAL but NOT tradeable with market orders. With an
+event-level bootstrap (sibling markets of one event cluster as a single
+observation — 304 jumps are only 77 independent events), the frictionless
+fade survives: +7.4 pts, 95% CI [+2.2, +11.9]. But executed at actual
+closing quotes net of Kalshi fees it evaporates: −1.1 pts [−6.5, +3.9]
+entering the jump day, −3.8 pts [−8.5, +0.6] entering the next day. The
+bid-ask spread on jump days widens by just about the size of the mispricing.
+Three uses survive anyway: (1) post-jump prices overstate the move by ~7 pts
+— the consensus engine should discount a freshly-jumped market's weight (or
+nudge fair value partway back toward the pre-jump price) rather than treat
+it as settled truth; (2) never chase momentum after a jump; (3) a
+maker-side fade (posting limit orders inside the spread) might capture the
+edge — untested, needs order-book data. The arc of this investigation is
+the whole methodology lesson: "+20 pts of edge" (raw) → artifact re-cut →
+"+7 pts real phenomenon" (bootstrap) → "0 pts at executable prices" (fees +
+spread). Every gate mattered.
 
 Next, in rough order:
 1. Real data into the models — polls via an aggregator API, federal

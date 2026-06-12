@@ -1,0 +1,23 @@
+==============================================================================
+  Jump-Fade Tradeability Test · 2026-06-12 05:01 UTC
+  Jump ≥ 0.15/day · vol ≥ 1000 · fee model 0.07·p·(1−p) per contract
+  All CIs: 95% EVENT-level bootstrap (clusters of correlated sibling
+  markets count once). Edge is established only if the CI excludes 0.
+  Units: probability points per contract (¢ per $1 payout).
+==============================================================================
+
+  ── SCHEDULED: 304 jumps in 77 events ──────────────────────
+  fade vs post-jump TRADE price (frictionless re-check):
+      +7.4 pts  [+2.2, +11.9]  (n=304, events=77) → EDGE
+  fade at SAME-day closing quotes, net of fees:
+      -1.1 pts  [-6.5, +3.9]  (n=304, events=77) → not established
+  fade at NEXT-day closing quotes, net of fees:
+      -3.8 pts  [-8.5, +0.6]  (n=296, events=77) → not established
+
+  ── EARLY: 491 jumps in 111 events ──────────────────────
+  fade vs post-jump TRADE price (frictionless re-check):
+      +5.4 pts  [+1.9, +8.5]  (n=491, events=111) → EDGE
+  fade at SAME-day closing quotes, net of fees:
+      -3.6 pts  [-7.9, +1.7]  (n=490, events=111) → not established
+  fade at NEXT-day closing quotes, net of fees:
+      -3.9 pts  [-7.1, +0.4]  (n=489, events=110) → not established
