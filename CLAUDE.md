@@ -9,8 +9,11 @@ deviates from the market. ONE fair-value engine drives both — arbitrage is the
 extreme case of a large deviation. Analysis and signal only: never auto-place bets.
 
 ## About the user
-Portfolio manager, fluent in Python and quant concepts. Skip basics. Prioritize
-mathematical correctness and clean, testable structure over hand-holding.
+Portfolio manager, comfortable with Python and general finance, but NOT a
+betting-markets specialist: explain domain concepts (vig/devig, sharp vs. soft
+books, Kelly, CLV, calibration) in plain English on first use, in chat and in
+docs. Keep README/docs readable by a layman. Still prioritize mathematical
+correctness and clean, testable structure — accessible explanations, rigorous code.
 
 ## Core design principles
 - For liquid markets, fair value = devigged consensus, weighted toward SHARP
@@ -36,6 +39,11 @@ mathematical correctness and clean, testable structure over hand-holding.
 - Every source sits behind a clean `OddsProvider` interface. An aggregator client
   and a direct Kalshi client must both satisfy the same interface. Do NOT couple
   pricing logic to any provider's schema — normalize at the boundary.
+- Elections model inputs: federal fundraising via OpenFEC REST API (free key;
+  state/local campaign finance is non-standardized — defer). Race context
+  (incumbency, primary margins, open seats) from Ballotpedia — no API, manual
+  or scraped. Polling ingestion vendor undecided; do not couple to one
+  (VoteHub's API is beta). Models satisfy `ModelProvider` (models/base.py).
 
 ## Conventions
 - Python 3.11+, fully type-hinted. uv for dependency management.
