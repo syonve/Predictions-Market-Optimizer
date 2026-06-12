@@ -1,0 +1,17 @@
+
+DRY-RUN MODE — no network calls
+
+  Market:           KXTEST-DRY-RUN
+  Kalshi YES:       54.0% (mid)
+  Polls YES:        59.9%  (3 polls, confidence 0.34)
+  Fundamentals YES: 66.3%  (incumbent + 70/30 money + primary blowout; confidence 0.50)
+  Fair YES:         57.3%  (confidence-weighted consensus, n_model=2)
+
+  Signal: YES   fair=57.3%  quoted=1.852x  edge=+6.0%  stake=$354
+
+Dry-run passed — pipeline wiring is correct.
+
+──────────────────────────────────────────
+Test suite: 258 passed (Python 3.14.5 via uv)
+Consensus weighting: confidence-scaled MODEL weights (polling ≤0.30, fundamentals ≤0.15) vs Kalshi 0.50
+Poll confidence rescaled: 25 effective polls → confidence 1.0 (was 5000, unreachable)

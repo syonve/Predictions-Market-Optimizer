@@ -1,0 +1,18 @@
+
+DRY-RUN MODE — no network calls
+
+  Market:           KXTEST-DRY-RUN
+  Kalshi YES:       54.0% (mid)
+  Polls YES:        60.0%
+  Fundamentals YES: 66.3%  (incumbent + 70/30 money + primary blowout, state race)
+  Fair YES:         59.0%  (consensus, n_model=2)
+
+  Signal: YES   fair=59.0%  quoted=1.852x  edge=+9.2%  stake=$500
+
+Dry-run passed — pipeline wiring is correct.
+
+──────────────────────────────────────────
+Test suite: 252 passed (Python 3.14.5 via uv)
+Devig method: shin · require_sharp=False (Kalshi PM as anchor)
+Models: polling aggregate + election fundamentals (incumbency, fundraising by race level, primary margin)
+Fixes verified: scan_ev and scan_arb no longer treat MODEL snapshots as bettable venues

@@ -1,0 +1,16 @@
+
+DRY-RUN MODE — no network calls
+
+  Market:       KXTEST-DRY-RUN
+  Kalshi YES:   54.0% (mid)
+  Model YES:    60.0%
+  Fair YES:     56.2%  (consensus, n_model=1)
+
+  Signal: NO    fair=43.7%  quoted=2.500x  edge=+9.4%  stake=$312
+  Signal: YES   fair=56.2%  quoted=1.852x  edge=+4.2%  stake=$245
+
+Dry-run passed — pipeline wiring is correct.
+
+──────────────────────────────────────────
+Test suite: 214 passed in 0.08s (Python 3.14.5 via uv)
+Devig method: shin · require_sharp=False (Kalshi PM as anchor)

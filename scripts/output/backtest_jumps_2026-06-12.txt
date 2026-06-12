@@ -1,0 +1,25 @@
+==============================================================================
+  Kalshi Politics Jump Study · 2026-06-12 04:42 UTC
+  Jump = daily close move ≥ 0.15, pre-price in [0.03, 0.97],
+  ≥ 2 days before close. Volume ≥ 1000.
+  Oriented metrics: positive = move direction kept paying (underreaction),
+  negative = outcomes fell back toward the old price (overreaction/fade),
+  ≈ zero = post-jump price was right; jumps are information.
+==============================================================================
+
+  ── SCHEDULED markets: 304 jumps ──────────────────────────────
+  direction: 133 up / 171 down · median |move| 0.23 · median days-out 7
+  continuation vs POST-jump price: -0.074 ± 0.026
+  continuation vs PRE-jump price:  +0.216 ± 0.026
+  Brier of post-jump prices:       0.2027
+  7-day post-jump drift (n=123):     -0.101 ± 0.025
+
+  ── EARLY markets: 491 jumps ──────────────────────────────
+  direction: 237 up / 254 down · median |move| 0.23 · median days-out 16
+  continuation vs POST-jump price: -0.054 ± 0.019
+  continuation vs PRE-jump price:  +0.220 ± 0.020
+  Brier of post-jump prices:       0.1823
+  7-day post-jump drift (n=274):     -0.084 ± 0.012
+
+  Caveat: jumps in sibling markets of one event (rival candidates) are
+  correlated; effective sample is smaller than the jump count.

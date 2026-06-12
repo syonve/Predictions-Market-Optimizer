@@ -10,3 +10,4 @@ build/
 .uv/
 uv.lock
 .DS_Store
+scripts/cache/

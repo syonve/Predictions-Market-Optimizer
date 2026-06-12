@@ -1,0 +1,66 @@
+
+Fetching market list for KXMAYORLA... 2 markets found.
+Scanning 2 markets...
+  [1/2] KXMAYORLA-26-NRAM  [2/2] KXMAYORLA-26-KBAS                                                                      
+══════════════════════════════════════════════════════════════════════════════════════════
+  Kalshi EV Scanner  ·  KXMAYORLA  ·  2026-06-09 23:09 UTC
+══════════════════════════════════════════════════════════════════════════════════════════
+
+  No signals above 1% edge threshold.
+  (Lower MIN_EDGE env var to see smaller edges)
+
+  SUMMARY
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  Markets fetched:       2
+  Markets with quotes:   2
+  Signals found:         0
+  Arb opportunities:     0
+  Polling model:         0 polls — model inactive
+    → Add Poll objects to POLLS list in this script to activate
+  Fundamentals model:    2 races loaded
+  Devig method:          shin
+  ──────────────────────────────────────────────────────────────────────────────────────────
+
+
+Fetching market list for KXMAYORLA... 2 markets found.
+Scanning 2 markets...
+  [1/2] KXMAYORLA-26-NRAM  [2/2] KXMAYORLA-26-KBAS                                                                      
+══════════════════════════════════════════════════════════════════════════════════════════
+  Kalshi EV Scanner  ·  KXMAYORLA  ·  2026-06-09 23:10 UTC
+══════════════════════════════════════════════════════════════════════════════════════════
+
+  TOP OPPORTUNITIES  (edge ≥ 0%)
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  MARKET                                   SIDE    FAIR  QUOTED    EDGE    STAKE  MODEL
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  KXMAYORLA-26-KBAS                        NO     38.0%   2.632   +0.0% $      0  📊
+  KXMAYORLA-26-NRAM                        YES    37.5%   2.667   +0.0% $      0  📊
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  TOTAL                                                                 $      0
+  Expected profit: $0.00  |  Bankroll: $10,000
+
+  SUMMARY
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  Markets fetched:       2
+  Markets with quotes:   2
+  Signals found:         2
+  Arb opportunities:     0
+  Polling model:         0 polls — model inactive
+    → Add Poll objects to POLLS list in this script to activate
+  Fundamentals model:    2 races loaded
+  Devig method:          shin
+  ──────────────────────────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────
+Live-run diagnostics (KXMAYORLA-26-KBAS, Bass):
+  Kalshi YES mid 62.0% | top-of-book size 9,947 contracts → venue weight 0.5*sqrt(9947) = 49.9
+  Fundamentals (incumbency-only) YES 59.9% | confidence 0.17 → model weight 0.05
+  → market outweighs model ~1000:1 on this book; fair value = 62.0%, edges ≈ 0
+
+FLAGGED: sqrt(liquidity) scaling uses raw venue units (contracts) and is
+unbounded — it makes any sized order book drown unsized venues by orders of
+magnitude. Needs a normalization decision before multi-venue use.
+
+Provider fix verified live: Kalshi query filter requires status=open
+(status=active silently returns zero markets).

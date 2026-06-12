@@ -1,0 +1,29 @@
+
+Fetching market list for KXDCMAYORD... 13 markets found.
+Scanning 13 markets...
+  [1/13] KXDCMAYORD-26-RSAM  [2/13] KXDCMAYORD-26-ZPAR  [3/13] KXDCMAYORD-26-RWHI  [4/13] KXDCMAYORD-26-PMEN  [5/13] KXDCMAYORD-26-MBOW  [6/13] KXDCMAYORD-26-KRAC  [7/13] KXDCMAYORD-26-KMCD  [8/13] KXDCMAYORD-26-JGEO  [9/13] KXDCMAYORD-26-GGOO  [10/13] KXDCMAYORD-26-CHEN  [11/13] KXDCMAYORD-26-BSCH  [12/13] KXDCMAYORD-26-BPIN  [13/13] KXDCMAYORD-26-BNAD                                                                      
+══════════════════════════════════════════════════════════════════════════════════════════
+  Kalshi EV Scanner  ·  KXDCMAYORD  ·  2026-06-09 23:14 UTC
+══════════════════════════════════════════════════════════════════════════════════════════
+
+  No signals above 2% edge threshold.
+  (Lower MIN_EDGE env var to see smaller edges)
+
+  SUMMARY
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  Markets fetched:       13
+  Markets with quotes:   13
+  Signals found:         0
+  Arb opportunities:     0
+  Polling model:         0 polls — model inactive
+    → Add Poll objects to POLLS list in this script to activate
+  Fundamentals model:    2 races loaded
+  Devig method:          shin
+  ──────────────────────────────────────────────────────────────────────────────────────────
+
+
+──────────────────────────────────────────
+Note: an earlier run flagged 1 'arb' on KXDCMAYORD-26-CHEN. Diagnosis: phantom —
+scan_arb was pricing legs at the bid/ask MIDPOINT (sum 1.000) when the executable
+cost was $1.019 per $1 of payout. Fixed: scan_arb now uses executable odds
+(Price.bid) and a min_roi floor. 262 tests green after fix.
